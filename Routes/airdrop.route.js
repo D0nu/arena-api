@@ -1,6 +1,6 @@
 // routes/airdropRoutes.js
 import express from 'express';
-import { claimAirdrop } from '../controllers/airdrop.controller.js';
+import { claimAirdrop } from '../Controllers/airdrop.controller.js';
 import { authMiddleware } from '../Middleware/auth.middleware.js';
 
 const router = express.Router();

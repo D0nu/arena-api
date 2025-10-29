@@ -1,6 +1,6 @@
 // routes/storeRoutes.js
 import express from 'express';
-import { buyCoins, getInventory } from '../controllers/store.controller.js';
+import { buyCoins, getInventory } from '../Controllers/store.controller.js';
 
 const router = express.Router();
 

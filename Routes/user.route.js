@@ -6,7 +6,7 @@ import {
   updateSettings, 
   purchaseItem, 
   getCharacter 
-} from '../controllers/user.controller.js';
+} from '../Controllers/user.controller.js';
 
 const router = express.Router();
 
