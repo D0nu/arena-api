@@ -1,0 +1,39 @@
+services:
+  - type: web
+    name: your-backend-app
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: CLIENT_URL
+        value: https://your-frontend-app.vercel.app
+      - key: SOLANA_RPC_URL
+        value: https://api.devnet.solana.com
+      - key: ARENA_WS_URL
+        value: wss://vorld-arena-server.onrender.com
+
+databases:
+  - name: your-mongodb
+    plan: free
+    type: mongodb
+    version: 6.0
+
+envVarGroups:
+  - name: production-secrets
+    envVars:
+      - key: MONGODB_URI
+        value: mongodb+srv://joshjoseph455_db_user:WBmM9ZumQJqADAE1@cluster0.cwa5jjg.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0
+      - key: JWT_SECRET
+        value: d10888fdb308fb2b804d5adce01699f024c44591feed3d5fe872b4fc906325db66a7fedb03f93f5f27177d0bd3667e3460c8a88f6575ed0ca4db01ac24729327
+      - key: WALLET_ENCRYPTION_KEY
+        value: e62525abcfb1ddd188320b6fcb9bcf41899103abae0eff18bc69c23f5d52dc8c
+      - key: STORE_WALLET
+        value: C15eFWuTezWVrEEog3vserFaj44bYT98EpNo9ShFKQWq
+      - key: VORLD_APP_ID
+        value: app_mh9ss1et_47f28e24
+EOF
