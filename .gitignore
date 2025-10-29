@@ -16,6 +16,12 @@ node_modules/
 .env
 .env.*
 !.env.example
+.env.production
+.env.local
+
+# Only track these:
+# .env.development
+# .env.example
 
 # Editor
 .vscode/
@@ -57,3 +63,4 @@ build/
 # Yarn
 .yarn-integrity
 EOF
+
