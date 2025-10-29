@@ -14,6 +14,12 @@ import airdropRoutes from './Routes/airdrop.route.js';
 import { socketConnection } from './Sockets/socketConnection.js';
 
 
+
+
+
+
+
+
 const envFile = process.env.NODE_ENV === 'production' ? '.env.production' : '.env.development';
 
 console.log(`🌍 Loading environment: ${process.env.NODE_ENV || 'development'}`);
@@ -28,7 +34,7 @@ if (envResult.error) {
   console.log(`✅ Successfully loaded ${envFile}`);
 }
 
-// Also load .env.local if it exists (for local overrides)
+
 if (process.env.NODE_ENV !== 'production') {
   try {
     dotenv.config({ path: '.env.local' });
@@ -38,7 +44,7 @@ if (process.env.NODE_ENV !== 'production') {
   }
 }
 
-// ----------------- Environment Validation & Defaults -----------------
+
 const requiredEnvVars = [
   'MONGODB_URI',
   'JWT_SECRET', 
@@ -75,7 +81,6 @@ if (missingEnvVars.length > 0) {
   }
 }
 
-// Set defaults for optional environment variables
 Object.entries(optionalEnvVars).forEach(([key, defaultValue]) => {
   if (!process.env[key]) {
     process.env[key] = defaultValue;
@@ -83,7 +88,7 @@ Object.entries(optionalEnvVars).forEach(([key, defaultValue]) => {
   }
 });
 
-// ----------------- Environment Debug -----------------
+
 console.log('\n=== ENVIRONMENT CONFIGURATION ===');
 console.log(`🔐 NODE_ENV: ${process.env.NODE_ENV}`);
 console.log(`🔐 PORT: ${process.env.PORT}`);
@@ -95,35 +100,63 @@ console.log(`🔐 STORE_WALLET: ${process.env.STORE_WALLET ? '✅ loaded' : '❌
 console.log(`🔐 VORLD_APP_ID: ${process.env.VORLD_APP_ID ? '✅ loaded' : '❌ missing'}`);
 console.log(`🔐 SOLANA_RPC_URL: ${process.env.SOLANA_RPC_URL}`);
 console.log(`🔐 ARENA_WS_URL: ${process.env.ARENA_WS_URL}`);
-console.log('=================================\n');
 
-// ----------------- Express Setup -----------------
+
 const app = express();
 const server = http.createServer(app);
 
-// CORS configuration based on environment
+
 const corsOptions = {
-  origin: process.env.CLIENT_URL,
+  origin: function (origin, callback) {
+
+    if (!origin) return callback(null, true);
+    
+
+    const allowedOrigins = [
+      'https://arenaclient.vercel.app',
+      'https://arenaclient.vercel.app/',
+      'http://localhost:5173',
+      'http://localhost:5173/'
+    ];
+
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+
+      const normalizedOrigin = origin.endsWith('/') ? origin.slice(0, -1) : origin;
+      const normalizedWithSlash = normalizedOrigin + '/';
+      
+      if (allowedOrigins.includes(normalizedOrigin) || allowedOrigins.includes(normalizedWithSlash)) {
+        callback(null, true);
+      } else {
+        console.log('❌ CORS blocked for origin:', origin);
+        callback(new Error('Not allowed by CORS'));
+      }
+    }
+  },
   credentials: true,
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "Cookie"]
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+  allowedHeaders: ["Content-Type", "Authorization", "Cookie", "X-Requested-With"],
+  exposedHeaders: ["Set-Cookie"]
 };
 
-console.log(`🔗 CORS configured for: ${corsOptions.origin}`);
+console.log(`🔗 CORS configured for: ${process.env.CLIENT_URL}`);
 
 app.use(cors(corsOptions));
 app.use(express.json());
 app.use(cookieParser());
 
-// ----------------- MongoDB -----------------
+
+app.options('*', cors(corsOptions));
+
+
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/airdrop-arena';
 
-// MongoDB connection with better error handling
 mongoose.connect(MONGODB_URI)
   .then(() => {
     console.log('✅ Connected to MongoDB');
     
-    // Check if we're using placeholder (development)
+  
     if (MONGODB_URI.includes('DEV_PLACEHOLDER')) {
       console.warn('⚠️  Using placeholder MongoDB URI - database operations will fail');
     }
@@ -139,14 +172,14 @@ mongoose.connect(MONGODB_URI)
     }
   });
 
-// ----------------- Routes -----------------
+
 app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/wallet', walletRoutes);
 app.use('/api/store', storeRoutes);
 app.use('/api/airdrop', airdropRoutes);
 
-// Health check endpoint
+
 app.get('/api/health', (req, res) => {
   const dbStatus = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected';
   
@@ -160,7 +193,6 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Root endpoint
 app.get('/', (req, res) => {
   res.json({ 
     message: 'Game Backend API is running',
@@ -171,9 +203,31 @@ app.get('/', (req, res) => {
   });
 });
 
-// ----------------- Socket.IO Setup -----------------
+
 const io = new Server(server, {
-  cors: corsOptions,
+  cors: {
+    origin: function (origin, callback) {
+      const allowedOrigins = [
+        'https://arenaclient.vercel.app',
+        'https://arenaclient.vercel.app/',
+        'http://localhost:5173',
+        'http://localhost:5173/'
+      ];
+      
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        const normalizedOrigin = origin.endsWith('/') ? origin.slice(0, -1) : origin;
+        if (allowedOrigins.includes(normalizedOrigin) || allowedOrigins.includes(normalizedOrigin + '/')) {
+          callback(null, true);
+        } else {
+          callback(new Error('Not allowed by CORS'));
+        }
+      }
+    },
+    credentials: true,
+    methods: ["GET", "POST"]
+  },
   connectionStateRecovery: {
     maxDisconnectionDuration: 2 * 60 * 1000, // 2 minutes
     skipMiddlewares: true
@@ -182,8 +236,7 @@ const io = new Server(server, {
 
 socketConnection(io);
 
-// ----------------- Error Handling -----------------
-// 404 handler
+
 app.use('*', (req, res) => {
   res.status(404).json({
     error: 'Route not found',
@@ -193,7 +246,7 @@ app.use('*', (req, res) => {
   });
 });
 
-// Global error handler
+
 app.use((err, req, res, next) => {
   console.error('🚨 Unhandled error:', err);
   
@@ -204,7 +257,7 @@ app.use((err, req, res, next) => {
   });
 });
 
-// ----------------- Graceful Shutdown -----------------
+
 process.on('SIGINT', async () => {
   console.log('\n🔻 Received SIGINT. Shutting down gracefully...');
   await mongoose.connection.close();
@@ -223,7 +276,7 @@ process.on('SIGTERM', async () => {
   });
 });
 
-// ----------------- Start Server -----------------
+
 const PORT = process.env.PORT || 5001;
 
 server.listen(PORT, '0.0.0.0', () => {
@@ -234,6 +287,4 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`📊 MongoDB: ${mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected'}`);
   console.log(`🏠 API URL: http://localhost:${PORT}`);
   console.log(`❤️  Health check: http://localhost:${PORT}/api/health`);
-  console.log('================================\n');
 });
-
