@@ -5,17 +5,15 @@ import { Server } from 'socket.io';
 import mongoose from 'mongoose';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
-import jwt from 'jsonwebtoken';
 
-import authRoutes from './routes/auth.route.js';
-import userRoutes from './routes/user.route.js';
-import walletRoutes from './routes/wallet.route.js';
-import storeRoutes from './routes/store.route.js';
-import airdropRoutes from './routes/airdrop.route.js';
-import { socketConnection } from './sockets/socketConnection.js';
+import authRoutes from './Routes/auth.route.js';
+import userRoutes from './Routes/user.route.js';
+import walletRoutes from './Routes/wallet.route.js';
+import storeRoutes from './Routes/store.route.js';
+import airdropRoutes from './Routes/airdrop.route.js';
+import { socketConnection } from './Sockets/socketConnection.js';
 
-// ----------------- Environment Configuration -----------------
-// Determine environment and load appropriate .env file
+
 const envFile = process.env.NODE_ENV === 'production' ? '.env.production' : '.env.development';
 
 console.log(`🌍 Loading environment: ${process.env.NODE_ENV || 'development'}`);
