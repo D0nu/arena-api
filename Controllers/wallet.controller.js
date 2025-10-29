@@ -1,7 +1,7 @@
 // controllers/walletController.js
 import { WalletService } from '../services/walletService.js';
 import { Connection, PublicKey, LAMPORTS_PER_SOL, SystemProgram, Transaction } from '@solana/web3.js';
-import { Transaction as TransactionModel } from '../models/Transaction.js';
+import { Transaction as TransactionModel } from '../Models/Transaction.js';
 
 const connection = new Connection(process.env.SOLANA_RPC_URL || 'https://api.devnet.solana.com');
 
