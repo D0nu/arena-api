@@ -1,9 +1,8 @@
-import { Game } from '../Models/Game.js';
-import { User } from '../Models/User.js';
+export const activeRooms = new Map();
 
-export function roomHandlers(io, socket, activeRooms, { safeEmit, safeBroadcast, removeCircularReferences }) {
+export function roomHandlers(io, socket, { safeEmit, safeBroadcast, removeCircularReferences }) {
   
-  // ✅ Create room handler
+
   socket.on('create-room', async (settings) => {
     try {
       const user = socket.user;
@@ -223,8 +222,19 @@ export function roomHandlers(io, socket, activeRooms, { safeEmit, safeBroadcast,
       room.players.push(newPlayer);
       socket.join(roomCode);
 
+      // ✅ FIXED: Update room status after join
+      const isRoomFull = room.players.length === room.settings.playerCount;
+      const allPlayersReady = room.players.every(p => p.isReady);
+
+      if (isRoomFull && allPlayersReady) {
+        room.status = 'ready-to-start';
+        console.log(`🎮 Room ${roomCode} became ready-to-start after join`);
+      } else {
+        room.status = 'waiting'; // Ensure it's waiting if not all conditions met
+      }
+
       console.log(`✅ ${user.name} joined room: ${roomCode} as Team ${newPlayer.team}`);
-      console.log(`📊 Room ${roomCode} now has ${room.players.length}/${room.settings.playerCount} players`);
+      console.log(`📊 Room ${roomCode} now has ${room.players.length}/${room.settings.playerCount} players, status: ${room.status}`);
 
       // 🔊 Emit to joiner
       safeEmit(socket, 'room-joined', {
@@ -266,7 +276,7 @@ export function roomHandlers(io, socket, activeRooms, { safeEmit, safeBroadcast,
     }
   });
 
-  // ✅ Toggle ready handler
+  // ✅ FIXED: Toggle ready handler - Now properly updates status in both directions
   socket.on('toggle-ready', async (roomCode) => {
     try {
       const user = socket.user;
@@ -291,13 +301,17 @@ export function roomHandlers(io, socket, activeRooms, { safeEmit, safeBroadcast,
       
       console.log(`✅ ${user.name} ready status: ${player.isReady}`);
 
-      // Check if all players are ready
-      const allPlayersReady = room.players.length === room.settings.playerCount && 
-                             room.players.every(p => p.isReady);
+      // ✅ FIXED: Check room status based on ALL conditions
+      const isRoomFull = room.players.length === room.settings.playerCount;
+      const allPlayersReady = room.players.every(p => p.isReady);
       
-      if (allPlayersReady) {
+      // Update room status based on current conditions
+      if (isRoomFull && allPlayersReady) {
         room.status = 'ready-to-start';
-        console.log(`🎮 All players ready in room: ${roomCode}`);
+        console.log(`🎮 All players ready in room: ${roomCode} → status: ready-to-start`);
+      } else {
+        room.status = 'waiting'; // ✅ FIXED: Reset to waiting if conditions aren't met
+        console.log(`🔄 Room ${roomCode} status reset to: waiting`);
       }
 
       // Notify all players
@@ -313,7 +327,7 @@ export function roomHandlers(io, socket, activeRooms, { safeEmit, safeBroadcast,
     }
   });
 
-  // ✅ Leave room handler
+  // ✅ FIXED: Leave room handler - Now properly resets status
   socket.on('leave-room', async (roomCode) => {
     try {
       const user = socket.user;
@@ -335,6 +349,10 @@ export function roomHandlers(io, socket, activeRooms, { safeEmit, safeBroadcast,
 
       // Remove player
       const removedPlayer = room.players.splice(playerIndex, 1)[0];
+      
+      // ✅ FIXED: Reset room status when player leaves
+      room.status = 'waiting';
+      console.log(`🔄 Room ${roomCode} status reset to waiting after player left`);
       
       // If owner left and there are other players, assign new owner
       if (removedPlayer.isOwner && room.players.length > 0) {
@@ -420,7 +438,7 @@ export function roomHandlers(io, socket, activeRooms, { safeEmit, safeBroadcast,
       code,
       playerCount: room.players.length,
       maxPlayers: room.settings.playerCount,
-      players: room.players.map(p => ({ name: p.name, team: p.team, isOwner: p.isOwner })),
+      players: room.players.map(p => ({ name: p.name, team: p.team, isOwner: p.isOwner, isReady: p.isReady })),
       status: room.status
     }));
     
@@ -507,6 +525,75 @@ export function roomHandlers(io, socket, activeRooms, { safeEmit, safeBroadcast,
     }
   });
 
+  // NEW: Handler for when players return to room after game
+  socket.on('return-to-room-after-game', (roomCode) => {
+    try {
+      console.log(`🔄 Player returning to room after game: ${roomCode}`);
+      
+      const room = activeRooms.get(roomCode);
+      if (room && room.status === 'starting') {
+        // Ensure room is reset to waiting
+        room.status = 'waiting';
+        
+        safeBroadcast(io, roomCode, 'room-updated', room);
+      }
+      
+    } catch (error) {
+      console.error('Return to room error:', error);
+    }
+  });
+
+  // NEW: Handler for room reset after game cleanup
+  socket.on('room-reset-complete', (roomCode) => {
+    try {
+      console.log(`🔄 Room reset complete: ${roomCode}`);
+      
+      const room = activeRooms.get(roomCode);
+      if (room) {
+        room.status = 'waiting';
+        
+        // Reset all players' ready status
+        room.players.forEach(player => {
+          player.isReady = false;
+        });
+        
+        safeBroadcast(io, roomCode, 'room-updated', room);
+        console.log(`✅ Room ${roomCode} fully reset to waiting state`);
+      }
+      
+    } catch (error) {
+      console.error('Room reset complete error:', error);
+    }
+  });
+
+  // NEW: Handler for checking if room can start game
+  socket.on('check-room-ready', (roomCode) => {
+    try {
+      const room = activeRooms.get(roomCode);
+      if (!room) {
+        safeEmit(socket, 'room-ready-status', { canStart: false, reason: 'Room not found' });
+        return;
+      }
+
+      const isRoomFull = room.players.length === room.settings.playerCount;
+      const allPlayersReady = room.players.every(player => player.isReady);
+      const canStart = isRoomFull && allPlayersReady;
+
+      safeEmit(socket, 'room-ready-status', {
+        canStart,
+        isRoomFull,
+        allPlayersReady,
+        currentPlayers: room.players.length,
+        requiredPlayers: room.settings.playerCount,
+        readyPlayers: room.players.filter(p => p.isReady).length
+      });
+
+    } catch (error) {
+      console.error('Check room ready error:', error);
+      safeEmit(socket, 'room-ready-status', { canStart: false, reason: 'Error checking room status' });
+    }
+  });
+
   // 🔧 Helper: Assign team to new player
   function assignTeamToNewPlayer(room, newPlayer) {
     const teamACount = room.players.filter(p => p.team === 'A').length;
@@ -569,4 +656,6 @@ export function roomHandlers(io, socket, activeRooms, { safeEmit, safeBroadcast,
       }
     }
   }
+
+ 
 }

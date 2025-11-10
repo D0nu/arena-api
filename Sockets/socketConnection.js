@@ -2,15 +2,13 @@ import jwt from "jsonwebtoken";
 import { User } from "../Models/User.js";
 import { gameHandlers } from "./gameHandlers.js";
 import { airdropHandlers } from "./airdropHandlers.js";
-import { roomHandlers } from "./roomHandlers.js";
+import { roomHandlers, activeRooms } from "./roomHandlers.js";
 import { characterHandlers } from "./characterHandlers.js";
 import { JWT_SECRET } from "../utils/jwtconfig.js";
 
 if (!JWT_SECRET) {
   console.error("❌ JWT_SECRET not defined! Socket authentication will fail.");
 }
-
-const activeRooms = new Map();
 
 // Utility: safe emit
 const safeEmit = (socket, event, data) => {
@@ -31,33 +29,42 @@ const safeBroadcast = (io, room, event, data) => {
   }
 };
 
+// Utility: remove circular references
+const removeCircularReferences = (obj) => {
+  try {
+    return JSON.parse(JSON.stringify(obj));
+  } catch (err) {
+    console.error("Error removing circular references:", err);
+    return obj;
+  }
+};
+
 export const socketConnection = (io) => {
   // Socket.IO config
   io.engine.maxHttpBufferSize = 1e8;
   io.engine.pingTimeout = 60000;
   io.engine.pingInterval = 25000;
 
-io.use(async (socket, next) => {
-  try {
-    const token = socket.handshake.auth?.token?.trim();
-    if (!token) return next(new Error("Authentication required"));
+  io.use(async (socket, next) => {
+    try {
+      const token = socket.handshake.auth?.token?.trim();
+      if (!token) return next(new Error("Authentication required"));
 
-    const decoded = jwt.verify(token, JWT_SECRET);
-    if (!decoded?.userId) return next(new Error("Invalid token structure"));
+      const decoded = jwt.verify(token, JWT_SECRET);
+      if (!decoded?.userId) return next(new Error("Invalid token structure"));
 
-    const user = await User.findById(decoded.userId).select("-password");
-    if (!user) return next(new Error("User not found"));
+      const user = await User.findById(decoded.userId).select("-password");
+      if (!user) return next(new Error("User not found"));
 
-    socket.user = user;
-    socket.userId = user._id.toString();
-    console.log(`✅ Socket authenticated for user: ${user.name} (${socket.id})`);
-    next();
-  } catch (err) {
-    console.error("🔴 Socket authentication failed:", err.message);
-    next(new Error("Authentication failed"));
-  }
-});
-
+      socket.user = user;
+      socket.userId = user._id.toString();
+      console.log(`✅ Socket authenticated for user: ${user.name} (${socket.id})`);
+      next();
+    } catch (err) {
+      console.error("🔴 Socket authentication failed:", err.message);
+      next(new Error("Authentication failed"));
+    }
+  });
 
   io.on("connection", async (socket) => {
     console.log(`✅ User ${socket.user.name} connected (${socket.id})`);
@@ -69,17 +76,21 @@ io.use(async (socket, next) => {
 
     safeEmit(socket, "authenticated", { user: socket.user, message: "Successfully authenticated" });
 
-    const handlerUtils = { safeEmit, safeBroadcast };
+    const handlerUtils = { safeEmit, safeBroadcast, removeCircularReferences };
 
-    roomHandlers(io, socket, activeRooms, handlerUtils);
-    gameHandlers(io, socket, activeRooms, handlerUtils);
+    // ✅ CORRECTED: Setup handlers with proper parameters
+    roomHandlers(io, socket, handlerUtils);
+    
+    // ✅ FIXED: Pass ALL required parameters in correct order
+    const gameHandlerResult = gameHandlers(io, socket, activeRooms, handlerUtils);
+    
     airdropHandlers(io, socket, handlerUtils);
     characterHandlers(io, socket, handlerUtils);
 
     socket.on("disconnect", async (reason) => {
       console.log(`❌ ${socket.user.name} disconnected:`, reason);
 
-      // Remove player from rooms
+      // Remove player from rooms using the SAME activeRooms instance
       for (const [roomCode, room] of activeRooms.entries()) {
         const index = room.players.findIndex((p) => p.id === socket.user._id.toString());
         if (index !== -1) {
@@ -105,4 +116,5 @@ io.use(async (socket, next) => {
   });
 };
 
+// ✅ Export the SAME activeRooms instance that both handlers use
 export { activeRooms, safeEmit, safeBroadcast };

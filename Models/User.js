@@ -1,6 +1,7 @@
+// User Model - FIXED VERSION
 import mongoose from "mongoose";
 
-// Character subdocument
+// Character subdocument (unchanged)
 const characterSchema = new mongoose.Schema({
   face: { type: String, default: "face1" },
   accessories: [String],
@@ -18,7 +19,7 @@ const characterSchema = new mongoose.Schema({
   updatedAt: { type: Date, default: Date.now }
 });
 
-// Settings subdocument
+// Settings subdocument (unchanged)
 const settingsSchema = new mongoose.Schema({
   theme: { type: String, enum: ["dark", "light"], default: "dark" },
   sound: { type: Boolean, default: true },
@@ -26,13 +27,12 @@ const settingsSchema = new mongoose.Schema({
   notifications: { type: Boolean, default: true },
 });
 
-// Wallet subdocument for Solana (Enhanced)
+// Wallet subdocument for Solana (unchanged)
 const walletSchema = new mongoose.Schema({
   publicKey: { 
     type: String, 
     unique: true, 
     sparse: true 
-    // REMOVED: index: true (causes duplicate with schema.index below)
   },
   privateKey: { 
     type: Object, 
@@ -51,7 +51,7 @@ const walletSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
-// Arcade Profile subdocument
+// Arcade Profile subdocument (unchanged)
 const arcadeProfileSchema = new mongoose.Schema({
   campaignId: String,
   arcadeId: String,
@@ -61,33 +61,32 @@ const arcadeProfileSchema = new mongoose.Schema({
   joinedAt: { type: Date, default: Date.now }
 });
 
-// Main User schema
+// Main User schema - FIXED: Standardize balance field
 const userSchema = new mongoose.Schema({
   socketId: { type: String },
   username: { 
     type: String, 
-    index: true // This is fine - no duplicate for username
+    index: true
   },
   name: { type: String },
   email: { 
     type: String, 
     required: true, 
-    unique: true 
-    // REMOVED: index: true (causes duplicate with schema.index below)
+    unique: true
   },
   password: { type: String, required: true },
 
-   lastCharacterUpdate: { type: Date, default: Date.now },
+  lastCharacterUpdate: { type: Date, default: Date.now },
 
   // Solana Wallet Integration
   wallet: walletSchema,
 
-  // Game Economy
+  // ✅ FIXED: Use ONLY coinBalance for game coins (remove balance confusion)
   coinBalance: { type: Number, default: 1000 },
   totalCoinsSpent: { type: Number, default: 0 },
   totalCoinsEarned: { type: Number, default: 0 },
   
-  // Game Stats
+  // Game Stats (unchanged)
   gamesPlayed: { type: Number, default: 0 },
   gamesWon: { type: Number, default: 0 },
   totalScore: { type: Number, default: 0 },
@@ -95,7 +94,7 @@ const userSchema = new mongoose.Schema({
   bestWinStreak: { type: Number, default: 0 },
   averageScore: { type: Number, default: 0 },
 
-  // Airdrop Tracking
+  // Airdrop Tracking (unchanged)
   airdropsClaimed: [{
     provider: String,
     amount: Number,
@@ -105,39 +104,38 @@ const userSchema = new mongoose.Schema({
   }],
   lastAirdropClaim: Date,
 
-  // Transaction History Reference
+  // Transaction History Reference (unchanged)
   transactions: [{ 
     type: mongoose.Schema.Types.ObjectId, 
     ref: 'Transaction' 
   }],
 
-  // Arcade Integration
+  // Arcade Integration (unchanged)
   arcadeProfile: arcadeProfileSchema,
 
-  // Embedded subdocuments
+  // Embedded subdocuments (unchanged)
   character: characterSchema,
   settings: settingsSchema,
 
-  // System meta
+  // System meta (unchanged)
   createdAt: { type: Date, default: Date.now },
   lastActive: { type: Date, default: Date.now },
   isVerified: { type: Boolean, default: false },
   isActive: { type: Boolean, default: true },
 });
 
-// ✅ SINGLE index definitions (no duplicates)
+// Index definitions (unchanged)
 userSchema.index({ email: 1 });
 userSchema.index({ 'wallet.publicKey': 1 });
 userSchema.index({ lastActive: -1 });
 userSchema.index({ 'arcadeProfile.arcadeId': 1 });
-// Note: username index is already defined inline above
 
-// Virtual for win percentage
+// Virtual for win percentage (unchanged)
 userSchema.virtual('winPercentage').get(function() {
   return this.gamesPlayed > 0 ? (this.gamesWon / this.gamesPlayed) * 100 : 0;
 });
 
-// Method to update game stats
+// Method to update game stats (unchanged)
 userSchema.methods.updateGameStats = function(score, won = false) {
   this.gamesPlayed += 1;
   this.totalScore += score;
@@ -160,7 +158,7 @@ characterSchema.pre('save', function(next) {
   next();
 });
 
-// Method to update coin balance
+// ✅ FIXED: Update coin balance method - use only coinBalance
 userSchema.methods.updateCoins = function(amount, type = 'earned') {
   if (type === 'earned') {
     this.coinBalance += amount;
@@ -172,12 +170,12 @@ userSchema.methods.updateCoins = function(amount, type = 'earned') {
   return this.save();
 };
 
-// Static method to find by wallet public key
+// Static method to find by wallet public key (unchanged)
 userSchema.statics.findByPublicKey = function(publicKey) {
   return this.findOne({ 'wallet.publicKey': publicKey });
 };
 
-// Static method to get top players
+// Static method to get top players (unchanged)
 userSchema.statics.getTopPlayers = function(limit = 10) {
   return this.find({ 'gamesPlayed': { $gt: 0 } })
     .sort({ 'gamesWon': -1, 'averageScore': -1 })
@@ -185,7 +183,7 @@ userSchema.statics.getTopPlayers = function(limit = 10) {
     .select('username character gamesPlayed gamesWon averageScore winStreak');
 };
 
-// Pre-save middleware
+// Pre-save middleware (unchanged)
 userSchema.pre('save', function(next) {
   if (this.wallet && this.wallet.privateKey && this.isModified('wallet.privateKey')) {
     console.log('Private key updated for user:', this._id);
